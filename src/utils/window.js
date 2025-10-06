@@ -40,8 +40,12 @@ function createWindow(sendToRenderer, geminiSessionRef, randomNames = null) {
         skipTaskbar: true,
         hiddenInMissionControl: true,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false, // TODO: change to true
+            // Use a secure preload bridge and enable context isolation so the
+            // renderer cannot access Node APIs directly. Node integration is
+            // disabled for production security.
+            preload: path.join(__dirname, '../preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
             backgroundThrottling: false,
             enableBlinkFeatures: 'GetDisplayMedia',
             webSecurity: true,
@@ -75,7 +79,30 @@ function createWindow(sendToRenderer, geminiSessionRef, randomNames = null) {
         mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
     }
 
-    mainWindow.loadFile(path.join(__dirname, '../index.html'));
+    // Development: load the Vite dev server so React (Vite) runs with HMR
+    const isDev = process.env.NODE_ENV === 'development' || Boolean(process.env.ELECTRON_START_URL);
+    const devUrl = process.env.ELECTRON_START_URL || 'http://localhost:5173';
+
+    // Prefer the built renderer (Vite build -> src/dist/index.html) if present in production
+    const distIndex = path.join(__dirname, '../dist/index.html');
+    const legacyIndex = path.join(__dirname, '../index.html');
+
+    if (isDev) {
+        try {
+            console.log('Loading renderer from dev server:', devUrl);
+            mainWindow.loadURL(devUrl);
+        } catch (err) {
+            console.error('Failed to load dev server URL, falling back to file. Error:', err);
+            if (fs.existsSync(distIndex)) mainWindow.loadFile(distIndex);
+            else mainWindow.loadFile(legacyIndex);
+        }
+    } else {
+        if (fs.existsSync(distIndex)) {
+            mainWindow.loadFile(distIndex);
+        } else {
+            mainWindow.loadFile(legacyIndex);
+        }
+    }
 
     // Set window title to random name if provided
     if (randomNames && randomNames.windowTitle) {
@@ -114,15 +141,11 @@ function createWindow(sendToRenderer, geminiSessionRef, randomNames = null) {
                         keybinds = { ...defaultKeybinds, ...savedSettings.keybinds };
                     }
 
-                    // Apply content protection setting via IPC handler
-                    try {
-                        const contentProtection = await mainWindow.webContents.executeJavaScript('cheddar.getContentProtection()');
-                        mainWindow.setContentProtection(contentProtection);
-                        console.log('Content protection loaded from settings:', contentProtection);
-                    } catch (error) {
-                        console.error('Error loading content protection:', error);
-                        mainWindow.setContentProtection(true);
-                    }
+                    // Default to content protection enabled. The renderer can
+                    // later call the main process handler 'update-content-protection'
+                    // with an explicit boolean to adjust this setting.
+                    mainWindow.setContentProtection(true);
+                    console.log('Content protection defaulted to enabled');
 
                     updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessionRef);
                 })

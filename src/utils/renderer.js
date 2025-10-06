@@ -1,5 +1,24 @@
 // renderer.js
-const { ipcRenderer } = require('electron');
+// Prefer preload-exposed ipcRenderer when running under contextIsolation.
+let ipcRenderer;
+try {
+    if (window?.electron && window.electron.ipcRenderer) {
+        ipcRenderer = window.electron.ipcRenderer;
+    }
+} catch (e) {
+    // ignore
+}
+
+// Fallback to require when nodeIntegration is available (legacy/dev)
+try {
+    if (!ipcRenderer && typeof require === 'function') {
+        // eslint-disable-next-line global-require
+        const electron = require('electron');
+        ipcRenderer = electron.ipcRenderer;
+    }
+} catch (e) {
+    // ignore
+}
 
 // Initialize random display name for UI components
 window.randomDisplayName = null;
@@ -31,8 +50,21 @@ let offscreenCanvas = null;
 let offscreenContext = null;
 let currentImageQuality = 'medium'; // Store current image quality for manual screenshots
 
-const isLinux = process.platform === 'linux';
-const isMacOS = process.platform === 'darwin';
+// Platform helpers: prefer values exposed via preload
+let isLinux = false;
+let isMacOS = false;
+try {
+    if (window?.electron) {
+        isLinux = Boolean(window.electron.isLinux);
+        isMacOS = Boolean(window.electron.isMacOS);
+    }
+} catch (e) {}
+
+// Fallback to process.platform when available
+try {
+    if (!isLinux && typeof process !== 'undefined') isLinux = process.platform === 'linux';
+    if (!isMacOS && typeof process !== 'undefined') isMacOS = process.platform === 'darwin';
+} catch (e) {}
 
 // Token tracking system for rate limiting
 let tokenTracker = {

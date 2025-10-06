@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
     <head>
         <meta http-equiv="content-security-policy" content="script-src 'self' 'unsafe-inline'" />
@@ -81,11 +81,7 @@
             }
 
             body {
-                font-family:
-                    'Inter',
-                    -apple-system,
-                    BlinkMacSystemFont,
-                    sans-serif;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             }
 
             * {
@@ -100,6 +96,29 @@
         </style>
     </head>
     <body>
+        <script>
+            // If a built renderer exists (from Vite build -> src/dist), load it instead of Lit app.
+            (async () => {
+                try {
+                    // In Electron file:// protocol, check for existence via fetch.
+                    const builtIndexUrl = './dist/index.html';
+                    const resp = await fetch(builtIndexUrl, { method: 'HEAD' });
+                    if (resp.ok) {
+                        // Replace current document with the built renderer
+                        const builtHtml = await fetch(builtIndexUrl).then(r => r.text());
+                        document.open();
+                        document.write(builtHtml);
+                        document.close();
+                        return;
+                    }
+                } catch (e) {
+                    // fall through to legacy Lit app
+                }
+
+                // Legacy Lit renderer (kept for incremental migration)
+            })();
+        </script>
+
         <script src="assets/marked-4.3.0.min.js"></script>
         <script src="assets/highlight-11.9.0.min.js"></script>
         <link rel="stylesheet" href="assets/highlight-vscode-dark.min.css" />

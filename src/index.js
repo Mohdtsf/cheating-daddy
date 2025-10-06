@@ -48,7 +48,7 @@ app.on('activate', () => {
 
 function setupGeneralIpcHandlers() {
     // Config-related IPC handlers
-    ipcMain.handle('set-onboarded', async (event) => {
+    ipcMain.handle('set-onboarded', async event => {
         try {
             const config = getLocalConfig();
             config.onboarded = true;
@@ -66,7 +66,7 @@ function setupGeneralIpcHandlers() {
             if (!validLevels.includes(stealthLevel)) {
                 throw new Error(`Invalid stealth level: ${stealthLevel}. Must be one of: ${validLevels.join(', ')}`);
             }
-            
+
             const config = getLocalConfig();
             config.stealthLevel = stealthLevel;
             writeConfig(config);
@@ -83,7 +83,7 @@ function setupGeneralIpcHandlers() {
             if (!validLayouts.includes(layout)) {
                 throw new Error(`Invalid layout: ${layout}. Must be one of: ${validLayouts.join(', ')}`);
             }
-            
+
             const config = getLocalConfig();
             config.layout = layout;
             writeConfig(config);
@@ -94,7 +94,7 @@ function setupGeneralIpcHandlers() {
         }
     });
 
-    ipcMain.handle('get-config', async (event) => {
+    ipcMain.handle('get-config', async event => {
         try {
             const config = getLocalConfig();
             return { success: true, config };
@@ -125,6 +125,21 @@ function setupGeneralIpcHandlers() {
         }
     });
 
+    // Renderer can request the current content protection setting via this
+    // handler. The renderer (via the secure preload) should invoke
+    // `electron.ipcRenderer.invoke('get-content-protection')` and return a
+    // boolean. If not implemented, this will catch the rejection in caller.
+    ipcMain.handle('get-content-protection', async event => {
+        try {
+            // By default, return true. The renderer may override this by
+            // returning a boolean value.
+            return true;
+        } catch (error) {
+            console.error('Error in get-content-protection handler:', error);
+            return true;
+        }
+    });
+
     ipcMain.on('update-keybinds', (event, newKeybinds) => {
         if (mainWindow) {
             updateGlobalShortcuts(newKeybinds, mainWindow, sendToRenderer, geminiSessionRef);
@@ -134,11 +149,10 @@ function setupGeneralIpcHandlers() {
     ipcMain.handle('update-content-protection', async (event, contentProtection) => {
         try {
             if (mainWindow) {
-
-                // Get content protection setting from localStorage via cheddar
-                const contentProtection = await mainWindow.webContents.executeJavaScript('cheddar.getContentProtection()');
-                mainWindow.setContentProtection(contentProtection);
-                console.log('Content protection updated:', contentProtection);
+                // Use the provided value from the renderer when available.
+                const enabled = typeof contentProtection === 'boolean' ? contentProtection : true;
+                mainWindow.setContentProtection(enabled);
+                console.log('Content protection updated:', enabled);
             }
             return { success: true };
         } catch (error) {
